@@ -160,3 +160,25 @@ cc_library_shared {
         },
     },
 }
+
+/////////////avoid device/google/cuttlefish build error
+cc_binary {
+    name: "android.hardware.graphics.allocator-service.minigbm",
+    defaults: ["minigbm_gralloc4_allocator_defaults"],
+    shared_libs: ["libminigbm_gralloc"],
+    vintf_fragments: ["android.hardware.graphics.allocator@4.0.xml"],
+    init_rc: ["android.hardware.graphics.allocator@4.0-service.minigbm.rc"],
+}
+
+filegroup {
+    name: "allocator.minigbm.rc",
+    srcs: ["android.hardware.graphics.allocator@4.0-service.minigbm.rc"]
+}
+
+prebuilt_etc {
+    name: "allocator.minigbm.xml",
+    src: "android.hardware.graphics.allocator@4.0.xml",
+    sub_dir: "vintf",
+    installable: false,
+}
+/////////////
