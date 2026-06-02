@@ -47,9 +47,29 @@ extern "C" {
 #include <vector>
 #include <xf86drm.h>
 #include <xf86drmMode.h>
+#include <inttypes.h>
+#include <cmath>
 
 #define GBM_WRAPPER_NAME "libgbm_mesa_wrapper.so"
 #define GBM_GET_OPS_SYMBOL "get_gbm_ops"
+
+static std::pair<int, int> find_closest_size(int blob) {
+    if (blob <= 0) {
+        return {0, 0};
+    }
+
+    int width = static_cast<int>(std::sqrt(blob));
+    int height = width = ((width + 255) / 256) * 256;
+
+    while (true) {
+        if (width * height == blob) {
+            return {width, height};
+        } else if (width * height < blob) {
+            return {width, height + 1};
+        }
+        height--;
+    }
+}
 
 void gbm_mesa_resolve_format_and_use_flags(struct driver *drv, uint32_t format, uint64_t use_flags,
 					   uint32_t *out_format, uint64_t *out_use_flags)
@@ -353,11 +373,12 @@ int gbm_mesa_bo_create(struct bo *bo, uint32_t width, uint32_t height, uint32_t 
 	}
 
 	if (alloc_args.drm_format == DRM_FORMAT_R8 && alloc_args.height == 1) {
-		/* Some mesa drivers may not support 1D allocations.
-		 * Use 2D texture with 4096 width instead.
-		 */
-		alloc_args.height = DIV_ROUND_UP(alloc_args.width, 4096);
-		alloc_args.width = 4096;
+        /* Some mesa drivers may not support 1D allocations.
+        * Use 2D texture instead.
+        */
+		std::pair<int, int> size = find_closest_size(alloc_args.width);
+		alloc_args.width = size.first;
+		alloc_args.height = size.second;
 		drv_logv("Allocate 1D buffer as %dx%d R8 2D texture", alloc_args.width,
 			 alloc_args.height);
 	}
@@ -416,15 +437,21 @@ int gbm_mesa_bo_import(struct bo *bo, struct drv_import_fd_data *data)
 		uint32_t s_format = data->format;
 		int s_height = data->height;
 		int s_width = data->width;
+		int s_stride = bo->meta.strides[0];
 		if (wr->get_gbm_format(s_format) == 0) {
 			s_width = bo->meta.total_size;
 			s_height = 1;
 			s_format = DRM_FORMAT_R8;
 		}
+        if (s_format == DRM_FORMAT_R8 && s_height == 1) {
+            std::pair<int, int> size = find_closest_size(s_width);
+            s_width = s_stride = size.first;
+            s_height = size.second;
+        }
 
 		priv->drv = drv;
 		priv->gbm_bo = wr->import(drv->gbm_dev, data->fds[0], s_width, s_height,
-					  data->strides[0], data->format_modifier, s_format);
+					  s_stride, data->format_modifier, s_format);
 	}
 
 	bo->priv = priv;
@@ -450,13 +477,20 @@ int gbm_mesa_bo_get_plane_fd(struct bo *bo, size_t plane)
 
 void *gbm_mesa_bo_map(struct bo *bo, struct vma *vma, size_t plane, uint32_t map_flags)
 {
+    if (!(bo->meta.use_flags & BO_USE_SW_MASK)) {
+        drv_loge("Can't map buffer without BO_USE_SW_MASK");
+        return MAP_FAILED;
+    }
+
+    auto priv = (GbmMesaBoPriv *)bo->priv;
+    if (!priv->gbm_bo) {
+        drv_loge("priv->gbm_bo != nullptr");
+    }
+
 	auto drv = gbm_mesa_get_or_init_driver(bo->drv, true);
 	auto wr = drv->wrapper;
 
 	vma->length = bo->meta.total_size;
-
-	auto priv = (GbmMesaBoPriv *)bo->priv;
-	assert(priv->gbm_bo != nullptr);
 
 	void *buf = MAP_FAILED;
 
@@ -466,7 +500,14 @@ void *gbm_mesa_bo_map(struct bo *bo, struct vma *vma, size_t plane, uint32_t map
 	if (wr->get_gbm_format(s_format) == 0) {
 		s_width = bo->meta.total_size;
 		s_height = 1;
+		s_format = DRM_FORMAT_R8;
 	}
+
+    if (s_format == DRM_FORMAT_R8 && s_height == 1) {
+        std::pair<int, int> size = find_closest_size(s_width);
+        s_width = size.first;
+        s_height = size.second;
+    }
 
 	wr->map(priv->gbm_bo, s_width, s_height, &buf, &vma->priv);
 
@@ -475,12 +516,12 @@ void *gbm_mesa_bo_map(struct bo *bo, struct vma *vma, size_t plane, uint32_t map
 
 int gbm_mesa_bo_unmap(struct bo *bo, struct vma *vma)
 {
+    auto priv = (GbmMesaBoPriv *)bo->priv;
+    if (priv->gbm_bo == nullptr || vma->priv == nullptr) {
+       return 0;
+    }
 	auto drv = gbm_mesa_get_or_init_driver(bo->drv, true);
 	auto wr = drv->wrapper;
-
-	auto priv = (GbmMesaBoPriv *)bo->priv;
-	assert(priv->gbm_bo != nullptr);
-	assert(vma->priv != nullptr);
 	wr->unmap(priv->gbm_bo, vma->priv);
 	vma->priv = nullptr;
 	return 0;
