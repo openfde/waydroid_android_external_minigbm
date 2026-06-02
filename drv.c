@@ -433,14 +433,6 @@ struct bo *drv_bo_import(struct driver *drv, struct drv_import_fd_data *data)
 	if (!bo)
 		return NULL;
 
-	ret = drv->backend->bo_import(bo, data);
-	if (ret) {
-		free(bo);
-		return NULL;
-	}
-
-	drv_bo_acquire(bo);
-
 	bo->meta.format_modifier = data->format_modifier;
 	for (plane = 0; plane < bo->meta.num_planes; plane++) {
 		bo->meta.strides[plane] = data->strides[plane];
@@ -465,6 +457,11 @@ struct bo *drv_bo_import(struct driver *drv, struct drv_import_fd_data *data)
 
 		bo->meta.total_size += bo->meta.sizes[plane];
 	}
+    ret = drv->backend->bo_import(bo, data);
+    if (ret) {
+        goto destroy_bo;
+    }
+    drv_bo_acquire(bo);
 
 	return bo;
 
