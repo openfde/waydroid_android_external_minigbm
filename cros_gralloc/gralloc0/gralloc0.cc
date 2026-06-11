@@ -11,6 +11,9 @@
 #include <cutils/native_handle.h>
 #include <hardware/gralloc.h>
 #include <memory.h>
+#include <cutils/properties.h>
+
+int flag_is_mesa_env = 0;
 
 struct gralloc0_module {
 	gralloc_module_t base;
@@ -82,6 +85,12 @@ static int gralloc0_alloc(alloc_device_t *dev, int w, int h, int format, int usa
 	descriptor.drm_format = cros_gralloc_convert_format(format);
 	descriptor.use_flags = cros_gralloc_convert_usage(usage);
 	descriptor.reserved_region_size = 0;
+	if (flag_is_mesa_env) {
+		if (w != ALIGN(w, 512) && format == HAL_PIXEL_FORMAT_YV12) {
+			descriptor.width = ALIGN(w, 256);
+			descriptor.drm_format = DRM_FORMAT_RGB565;
+		}
+	}
 
 	if (!mod->driver->is_supported(&descriptor)) {
 		ALOGE("Unsupported combination -- HAL format: %u, HAL usage: %u, "
@@ -166,6 +175,12 @@ static int gralloc0_open(const struct hw_module_t *mod, const char *name, struct
 
 	if (gralloc0_init(module, true))
 		return -ENODEV;
+
+	char egl_type[PROPERTY_VALUE_MAX];
+	property_get("ro.hardware.egl", egl_type, "none");
+	if (strcmp(egl_type, "mesa") == 0) {
+		flag_is_mesa_env = 1;
+	}
 
 	*dev = &module->alloc->common;
 	return 0;
@@ -458,6 +473,15 @@ static int gralloc0_lock_async_ycbcr(struct gralloc_module_t const *module, buff
 	return 0;
 }
 
+static int gralloc0_need_convert_format(const gralloc_module_t *module, buffer_handle_t handle)
+{
+	auto hnd = cros_gralloc_convert_handle(handle);
+	if (hnd->format == DRM_FORMAT_RGB565 && hnd->droid_format == HAL_PIXEL_FORMAT_YV12) {
+		return 1;
+	}
+	return 0;
+}
+
 // clang-format off
 static struct hw_module_methods_t gralloc0_module_methods = { .open = gralloc0_open };
 // clang-format on
@@ -485,8 +509,9 @@ struct gralloc0_module HAL_MODULE_INFO_SYM = {
 		.lockAsync = gralloc0_lock_async,
 		.unlockAsync = gralloc0_unlock_async,
 		.lockAsync_ycbcr = gralloc0_lock_async_ycbcr,
-                .validateBufferSize = NULL,
-                .getTransportSize = NULL,
+		.getTransportSize = NULL,
+		.validateBufferSize = NULL,
+		.need_convert_format = gralloc0_need_convert_format,
 	    },
 
 	.alloc = nullptr,
