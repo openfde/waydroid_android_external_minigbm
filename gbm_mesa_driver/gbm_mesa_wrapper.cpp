@@ -125,6 +125,9 @@ static int gbm_mesa_alloc(struct alloc_args *args)
 	if (args->force_linear)
 		usage |= GBM_BO_USE_LINEAR;
 
+	if (args->use_render)
+		usage |= GBM_BO_USE_RENDERING;
+
 	if (args->use_scanout)
 		usage |= GBM_BO_USE_SCANOUT;
 
@@ -143,8 +146,8 @@ static int gbm_mesa_alloc(struct alloc_args *args)
 	}
 
 	if (!bo) {
-		ALOGE("Unable to create BO, size=%dx%d, fmt=%d", args->width, args->height,
-		      args->drm_format);
+		ALOGE("Unable to create BO, size=%dx%d, fmt=%d, usage:%d", args->width, args->height,
+		      args->drm_format, usage);
 		return -EINVAL;
 	}
 

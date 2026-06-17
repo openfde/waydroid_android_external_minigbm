@@ -27,6 +27,7 @@ struct alloc_args {
 	uint32_t height;
 	uint32_t drm_format;
 	bool use_scanout;
+	bool use_render;
 	bool force_linear;
 	bool needs_map_stride;
 	int out_fd;
