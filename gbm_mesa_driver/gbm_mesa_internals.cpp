@@ -344,9 +344,10 @@ int gbm_mesa_bo_create(struct bo *bo, uint32_t width, uint32_t height, uint32_t 
 		.width = width,
 		.height = height,
 		.drm_format = wr->get_gbm_format(format) ? format : 0,
+		.use_scanout = (use_flags & BO_USE_SCANOUT) != 0,
+		.use_render = (use_flags & BO_USE_RENDERING) != 0,
 		.force_linear = (use_flags & BO_USE_SW_MASK) != 0,
 		.needs_map_stride = (use_flags & BO_USE_SW_MASK) != 0,
-		.use_scanout = (use_flags & BO_USE_SCANOUT) != 0,
 	};
 
 	/* Alignment for RPI4 CSI camera. Since we do not care about other cameras, keep this
