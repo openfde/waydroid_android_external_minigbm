@@ -430,7 +430,7 @@ int gbm_mesa_bo_import(struct bo *bo, struct drv_import_fd_data *data)
 		priv->fds[plane] = UniqueFd(dup(data->fds[plane]));
 	}
 
-	if (data->use_flags & BO_USE_SW_MASK) {
+	if (data->use_flags & (BO_USE_SW_MASK | BO_USE_TEXTURE | BO_USE_HW_VIDEO_ENCODER)) {
 		// Mapping require importing by gbm_mesa
 		auto drv = gbm_mesa_get_or_init_driver(bo->drv, true);
 		auto wr = drv->wrapper;
@@ -478,8 +478,8 @@ int gbm_mesa_bo_get_plane_fd(struct bo *bo, size_t plane)
 
 void *gbm_mesa_bo_map(struct bo *bo, struct vma *vma, size_t plane, uint32_t map_flags)
 {
-    if (!(bo->meta.use_flags & BO_USE_SW_MASK)) {
-        drv_loge("Can't map buffer without BO_USE_SW_MASK");
+    if (!(bo->meta.use_flags & (BO_USE_SW_MASK | BO_USE_TEXTURE | BO_USE_HW_VIDEO_ENCODER))) {
+        drv_loge("Can't map buffer flag:%d", bo->meta.use_flags);
         return MAP_FAILED;
     }
 
