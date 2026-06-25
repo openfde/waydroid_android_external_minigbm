@@ -731,7 +731,7 @@ uint32_t drv_bo_get_pixel_stride(struct bo *bo)
 	if ((bo->meta.use_flags & BO_USE_SW_MASK) && drv->backend->bo_get_map_stride)
 		map_stride = drv->backend->bo_get_map_stride(bo);
 
-	if (!map_stride)
+	if (!map_stride || bo->meta.format == DRM_FORMAT_YVU420_ANDROID)
 		map_stride = bo->meta.strides[0];
 
 	return DIV_ROUND_UP(map_stride, bytes_per_pixel);
